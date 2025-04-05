@@ -38,14 +38,14 @@ Medical QA App 是一款利用大型语言模型（LLM）技术构建的应用�
 
 
 ## 项目结构
-    Medical-QA-App/
-    ├── backend/               # 后端代码
+    MSE-AI-T4/
+    ├── backend/               # 后端代码，主要由林凡钧、刘佳凡、徐平负责维护
     │   ├── app.py             # 主应用文件（如 Flask/Django/FastAPI）
     │   ├── requirements.txt   # Python依赖包列表
     │   ├── models/            # 存放模型相关的代码
     │   ├── services/          # 服务层逻辑（如与LLM交互）
-    │   └── tests/             # 后端单元测试
-    ├── frontend/              # 前端代码
+    │   └── tests/             # 后端单元测试，主要由翟怡丹、王博海负责维护
+    ├── frontend/              # 前端代码，主要由苏宇翔、徐嘉雯、徐平负责维护
     │   ├── public/            # 静态资源
     │   ├── src/               # React/Vue/Angular等前端框架代码
     │   │   ├── components/    # UI组件
@@ -53,7 +53,7 @@ Medical QA App 是一款利用大型语言模型（LLM）技术构建的应用�
     │   │   └── App.js         # 主入口文件
     │   ├── package.json       # 前端依赖包列表
     │   └── README.md          # 前端说明文档
-    ├── docs/                  # 文档目录
+    ├── docs/                  # 文档目录，主要由黄杨、董宜涛、姚之远负责维护
     │   ├── api-docs.md        # API 文档
     │   ├── architecture.md    # 系统架构设计
     │   ├── user-guide.md      # 用户指南
