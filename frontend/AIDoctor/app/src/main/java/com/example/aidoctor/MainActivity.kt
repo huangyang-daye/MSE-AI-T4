@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,11 +30,17 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import com.example.aidoctor.ui.theme.AIDoctorTheme
 import com.example.aidoctor.utils.HttpUtils
+import com.example.aidoctor.db.ChatDatabaseHelper
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.window.Dialog
 
 data class Message(
     val content: String,
@@ -42,13 +49,37 @@ data class Message(
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
+    private lateinit var dbHelper: ChatDatabaseHelper
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        dbHelper = ChatDatabaseHelper(this)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
         enableEdgeToEdge()
         setContent {
             AIDoctorTheme {
-                ChatScreen()
+                var showHistory by remember { mutableStateOf(false) }
+                var currentSessionId by remember { mutableStateOf<Long?>(null) }
+                
+                if (showHistory) {
+                    HistoryScreen(
+                        onBackClick = { showHistory = false },
+                        onSessionClick = { sessionId ->
+                            currentSessionId = sessionId
+                            showHistory = false
+                        },
+                        dbHelper = dbHelper
+                    )
+                } else {
+                    ChatScreen(
+                        dbHelper = dbHelper,
+                        onHistoryClick = { showHistory = true },
+                        currentSessionId = currentSessionId,
+                        onNewSession = { sessionId ->
+                            currentSessionId = sessionId
+                        }
+                    )
+                }
             }
         }
     }
@@ -105,7 +136,12 @@ fun MessageBubble(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ChatScreen() {
+fun ChatScreen(
+    dbHelper: ChatDatabaseHelper,
+    onHistoryClick: () -> Unit,
+    currentSessionId: Long?,
+    onNewSession: (Long) -> Unit
+) {
     var messages by remember { mutableStateOf(listOf<Message>()) }
     var inputText by remember { mutableStateOf("") }
     var isTyping by remember { mutableStateOf(false) }
@@ -114,6 +150,17 @@ fun ChatScreen() {
     val view = LocalView.current
     var isKeyboardOpen by remember { mutableStateOf(false) }
     val keyboardHeight = WindowInsets.ime.getBottom(LocalDensity.current)
+    var showMenu by remember { mutableStateOf(false) }
+    var showClearDialog by remember { mutableStateOf(false) }
+
+    // 加载当前会话的消息
+    LaunchedEffect(currentSessionId) {
+        if (currentSessionId != null) {
+            messages = dbHelper.getSessionMessages(currentSessionId)
+        } else {
+            messages = emptyList()
+        }
+    }
 
     // 监听键盘状态
     DisposableEffect(view) {
@@ -133,7 +180,6 @@ fun ChatScreen() {
     // 自动滚动到底部
     LaunchedEffect(messages.size, keyboardHeight) {
         if (messages.isNotEmpty()) {
-            // 减少延迟时间并使用更快的滚动方式
             delay(40)
             listState.scrollToItem(messages.size - 1)
         }
@@ -160,7 +206,7 @@ fun ChatScreen() {
                 },
                 navigationIcon = {
                     IconButton(
-                        onClick = { /* TODO: 添加菜单功能 */ },
+                        onClick = { showMenu = true },
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
@@ -172,7 +218,7 @@ fun ChatScreen() {
                 },
                 actions = {
                     IconButton(
-                        onClick = { /* TODO: 添加历史记录功能 */ },
+                        onClick = onHistoryClick,
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(
@@ -245,17 +291,43 @@ fun ChatScreen() {
                             Button(
                                 onClick = {
                                     if (inputText.trim().isNotEmpty()) {
-                                        messages = messages + Message(inputText, true)
-                                        val userMessage = inputText
+                                        val userMessage = Message(inputText, true)
                                         inputText = ""
                                         isTyping = true
 
                                         scope.launch {
                                             try {
-                                                val response = HttpUtils.sendMessage(userMessage)
-                                                messages = messages + Message(response, false)
+                                                // 如果是新会话，创建一个新的会话
+                                                val sessionId = currentSessionId ?: dbHelper.createNewSession("新对话")
+                                                if (currentSessionId == null) {
+                                                    onNewSession(sessionId)
+                                                }
+                                                
+                                                // 如果是第一条消息，更新会话标题
+                                                if (messages.isEmpty()) {
+                                                    dbHelper.updateSessionTitle(sessionId, userMessage.content.take(30))
+                                                }
+                                                
+                                                // 保存用户消息
+                                                dbHelper.saveMessage(sessionId, userMessage)
+                                                messages = messages + userMessage
+                                                
+                                                // 获取AI响应
+                                                val response = HttpUtils.sendMessage(userMessage.content)
+                                                val aiMessage = Message(response, false)
+                                                dbHelper.saveMessage(sessionId, aiMessage)
+                                                messages = messages + aiMessage
                                             } catch (e: Exception) {
-                                                messages = messages + Message("发送消息失败，请稍后重试", false)
+                                                e.printStackTrace() // 添加日志以便调试
+                                                val errorMessage = Message("发送消息失败，请稍后重试", false)
+                                                if (currentSessionId != null) {
+                                                    try {
+                                                        dbHelper.saveMessage(currentSessionId, errorMessage)
+                                                    } catch (dbError: Exception) {
+                                                        dbError.printStackTrace() // 添加日志以便调试
+                                                    }
+                                                }
+                                                messages = messages + errorMessage
                                             } finally {
                                                 isTyping = false
                                             }
@@ -281,5 +353,91 @@ fun ChatScreen() {
                 }
             }
         }
+    }
+
+    // 菜单对话框
+    if (showMenu) {
+        AlertDialog(
+            onDismissRequest = { showMenu = false },
+            title = { Text("菜单") },
+            text = {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("新建聊天") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "新建聊天"
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            showMenu = false
+                            scope.launch {
+                                val sessionId = dbHelper.createNewSession("新对话")
+                                onNewSession(sessionId)
+                            }
+                        }
+                    )
+                    ListItem(
+                        headlineContent = { Text("清除当前对话") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "清除对话"
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            showMenu = false
+                            showClearDialog = true
+                        }
+                    )
+                    ListItem(
+                        headlineContent = { Text("设置") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "设置"
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            showMenu = false
+                            // TODO: 实现设置功能
+                        }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showMenu = false }) {
+                    Text("关闭")
+                }
+            }
+        )
+    }
+
+    // 清除对话确认对话框
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("清除对话") },
+            text = { Text("确定要清除当前对话吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            currentSessionId?.let { dbHelper.deleteSession(it) }
+                            messages = emptyList()
+                            showClearDialog = false
+                        }
+                    }
+                ) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
