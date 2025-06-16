@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.WindowInsets
 import com.example.aidoctor.ui.theme.AIDoctorTheme
+import com.example.aidoctor.model.Message
 import com.example.aidoctor.utils.HttpUtils
 import com.example.aidoctor.db.ChatDatabaseHelper
 import kotlinx.coroutines.launch
@@ -40,12 +41,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.ui.window.Dialog
-
-data class Message(
-    val content: String,
-    val isUser: Boolean
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -77,7 +74,8 @@ class MainActivity : ComponentActivity() {
                         currentSessionId = currentSessionId,
                         onNewSession = { sessionId ->
                             currentSessionId = sessionId
-                        }
+                        },
+                        onShowHistoryChange = { showHistory = it }
                     )
                 }
             }
@@ -140,7 +138,8 @@ fun ChatScreen(
     dbHelper: ChatDatabaseHelper,
     onHistoryClick: () -> Unit,
     currentSessionId: Long?,
-    onNewSession: (Long) -> Unit
+    onNewSession: (Long) -> Unit,
+    onShowHistoryChange: (Boolean) -> Unit
 ) {
     var messages by remember { mutableStateOf(listOf<Message>()) }
     var inputText by remember { mutableStateOf("") }
@@ -217,6 +216,42 @@ fun ChatScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                try {
+                                    val latestSessionId = dbHelper.getLatestSessionId()
+                                    if (latestSessionId != null) {
+                                        // 更新当前会话并关闭历史记录
+                                        onNewSession(latestSessionId)
+                                        onShowHistoryChange(false)
+                                        
+                                        // 添加预设消息
+                                        val presetMessage = Message("你今天的症状如何？", false)
+                                        dbHelper.saveMessage(latestSessionId, presetMessage)
+                                        messages = messages + presetMessage
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    val errorMessage = Message("操作失败，请稍后重试", false)
+                                    if (currentSessionId != null) {
+                                        try {
+                                            dbHelper.saveMessage(currentSessionId, errorMessage)
+                                        } catch (dbError: Exception) {
+                                            dbError.printStackTrace()
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.sick),
+                            contentDescription = "病情追踪",
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
                     IconButton(
                         onClick = onHistoryClick,
                         modifier = Modifier.size(48.dp)
@@ -313,18 +348,18 @@ fun ChatScreen(
                                                 messages = messages + userMessage
                                                 
                                                 // 获取AI响应
-                                                val response = HttpUtils.sendMessage(userMessage.content)
+                                                val response = HttpUtils.sendMessage(sessionId, userMessage.content)
                                                 val aiMessage = Message(response, false)
                                                 dbHelper.saveMessage(sessionId, aiMessage)
                                                 messages = messages + aiMessage
                                             } catch (e: Exception) {
-                                                e.printStackTrace() // 添加日志以便调试
+                                                e.printStackTrace()
                                                 val errorMessage = Message("发送消息失败，请稍后重试", false)
                                                 if (currentSessionId != null) {
                                                     try {
                                                         dbHelper.saveMessage(currentSessionId, errorMessage)
                                                     } catch (dbError: Exception) {
-                                                        dbError.printStackTrace() // 添加日志以便调试
+                                                        dbError.printStackTrace()
                                                     }
                                                 }
                                                 messages = messages + errorMessage
@@ -362,6 +397,19 @@ fun ChatScreen(
             title = { Text("菜单") },
             text = {
                 Column {
+                    ListItem(
+                        headlineContent = { Text("返回首页") },
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.Home,
+                                contentDescription = "返回首页"
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            showMenu = false
+                            onNewSession(-1L)  // 使用-1L表示返回首页
+                        }
+                    )
                     ListItem(
                         headlineContent = { Text("新建聊天") },
                         leadingContent = {
