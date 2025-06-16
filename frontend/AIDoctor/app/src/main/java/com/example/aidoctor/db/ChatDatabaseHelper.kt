@@ -5,7 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.util.Log
-import com.example.aidoctor.Message
+import com.example.aidoctor.model.Message
 import java.util.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -233,6 +233,96 @@ class ChatDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
         } catch (e: Exception) {
             Log.e("ChatDatabaseHelper", "Error updating session title", e)
             throw e
+        }
+    }
+
+    fun getLatestSessionId(): Long? {
+        var sessionId: Long? = null
+        try {
+            val db = this.readableDatabase
+            val cursor = db.query(
+                TABLE_SESSIONS,
+                arrayOf(COLUMN_ID),
+                null,
+                null,
+                null,
+                null,
+                "$COLUMN_ID DESC",
+                "1"
+            )
+            if (cursor.moveToFirst()) {
+                sessionId = cursor.getLong(cursor.getColumnIndexOrThrow(COLUMN_ID))
+            }
+            cursor.close()
+        } catch (e: Exception) {
+            Log.e("ChatDatabaseHelper", "Error getting latest session ID", e)
+            e.printStackTrace()
+        }
+        return sessionId
+    }
+
+    fun deleteLastMessage(sessionId: Long) {
+        val db = this.writableDatabase
+        try {
+            // 获取最后一条消息的ID
+            val cursor = db.query(
+                TABLE_MESSAGES,
+                arrayOf("id"),
+                "session_id = ?",
+                arrayOf(sessionId.toString()),
+                null,
+                null,
+                "id DESC",
+                "1"
+            )
+
+            if (cursor.moveToFirst()) {
+                val messageId = cursor.getLong(0)
+                // 删除该消息
+                db.delete(
+                    TABLE_MESSAGES,
+                    "id = ?",
+                    arrayOf(messageId.toString())
+                )
+            }
+            cursor.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun updateLastMessage(sessionId: Long, newMessage: Message) {
+        val db = this.writableDatabase
+        try {
+            // 获取最后一条消息的ID
+            val cursor = db.query(
+                TABLE_MESSAGES,
+                arrayOf("id"),
+                "session_id = ?",
+                arrayOf(sessionId.toString()),
+                null,
+                null,
+                "id DESC",
+                "1"
+            )
+
+            if (cursor.moveToFirst()) {
+                val messageId = cursor.getLong(0)
+                // 更新该消息
+                val values = ContentValues().apply {
+                    put("content", newMessage.content)
+                    put("is_user", if (newMessage.isUser) 1 else 0)
+                }
+                db.update(
+                    TABLE_MESSAGES,
+                    values,
+                    "id = ?",
+                    arrayOf(messageId.toString())
+                )
+            }
+            cursor.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 } 
