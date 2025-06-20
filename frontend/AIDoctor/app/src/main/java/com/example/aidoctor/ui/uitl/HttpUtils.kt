@@ -9,12 +9,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
-class HttpUtils {
+class HttpUtils2 {
     companion object {
         private const val BASE_URL = "http://26.26.26.1:8000" // 替换为您的服务器地址
         private const val TAG = "HttpUtils"
 
-        suspend fun sendMessage(message: String): String = withContext(Dispatchers.IO) {
+        suspend fun sendMessage(sessionId : Long, message: String): String = withContext(Dispatchers.IO) {
             var response = ""
             try {
                 val encodedMessage = URLEncoder.encode(message, "UTF-8")
