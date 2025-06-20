@@ -1,11 +1,17 @@
 package com.example.aidoctor
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.ViewTreeObserver
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,53 +21,90 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.WindowInsets
-import com.example.aidoctor.ui.theme.AIDoctorTheme
-import com.example.aidoctor.model.Message
-import com.example.aidoctor.utils.HttpUtils
+import androidx.core.content.ContextCompat
 import com.example.aidoctor.db.ChatDatabaseHelper
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.example.aidoctor.model.Message
+import com.example.aidoctor.ui.theme.AIDoctorTheme
+import com.example.aidoctor.utils.HttpUtils
 import kotlinx.coroutines.delay
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.launch
+import java.util.Calendar
 
-import android.content.Intent
-import android.widget.Toast
-import androidx.compose.material3.ListItem
+/// 通知和日志
+import addCalendarEvent;
+import sendNotification;
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     private lateinit var dbHelper: ChatDatabaseHelper
 
+    // 注册一个活动结果启动器来请求多个权限
+    private val requestPermissionsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val allGranted = permissions.values.all { it }
+            if (allGranted) {
+                // 所有权限都已授予
+            } else {
+                // 部分或全部权限被拒绝
+                Toast.makeText(this, "部分权限被拒绝，相关功能可能无法使用", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+    private fun askForPermissions() {
+        val permissionsToRequest = mutableListOf<String>()
+
+        // Android 13+ 需要通知权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // 日历权限
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.WRITE_CALENDAR)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.READ_CALENDAR)
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            requestPermissionsLauncher.launch(permissionsToRequest.toTypedArray())
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         dbHelper = ChatDatabaseHelper(this)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN)
+
+        // 在设置内容之前请求所有需要的权限
+        askForPermissions()
+
         enableEdgeToEdge()
         setContent {
             AIDoctorTheme {
                 var showHistory by remember { mutableStateOf(false) }
                 var currentSessionId by remember { mutableStateOf<Long?>(null) }
-                
+
                 if (showHistory) {
                     HistoryScreen(
                         onBackClick = { showHistory = false },
@@ -229,7 +272,7 @@ fun ChatScreen(
                                         // 更新当前会话并关闭历史记录
                                         onNewSession(latestSessionId)
                                         onShowHistoryChange(false)
-                                        
+
                                         // 添加预设消息
                                         val presetMessage = Message("你今天的症状如何？", false)
                                         dbHelper.saveMessage(latestSessionId, presetMessage)
@@ -329,6 +372,31 @@ fun ChatScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
                                 onClick = {
+                                    sendNotification(view.context, "AIDoctor 提醒", "偷偷给你加了个30分钟后的日历哈哈哈哈");
+
+                                    // 会g, 因为测试机器日历不行
+//                                    val calendar = Calendar.getInstance()
+//                                    val startMillis = calendar.timeInMillis + 60 * 1000 // 1分钟后
+//                                    val endMillis = startMillis + 30 * 60 * 1000 // 持续30分钟
+//
+//                                    val eventId = addCalendarEvent(
+//                                        context = view.context,
+//                                        title = "AIDoctor 提醒",
+//                                        description = "记得体验AI医生服务哦！",
+//                                        location = "",
+//                                        startMillis = startMillis,
+//                                        endMillis = endMillis,
+//                                        reminderMinutes = 1 // 提前1分钟提醒
+//                                    )
+//
+//                                    if (eventId != null) {
+//                                        Toast.makeText(view.context, "日历事件已添加", Toast.LENGTH_SHORT).show()
+//                                    } else {
+//                                        Toast.makeText(view.context, "添加日历事件失败，请检查权限", Toast.LENGTH_SHORT).show()
+//                                    }
+
+
+
                                     if (inputText.trim().isNotEmpty()) {
                                         val userMessage = Message(inputText, true)
                                         inputText = ""
@@ -336,21 +404,22 @@ fun ChatScreen(
 
                                         scope.launch {
                                             try {
+
                                                 // 如果是新会话，创建一个新的会话
                                                 val sessionId = currentSessionId ?: dbHelper.createNewSession("新对话")
                                                 if (currentSessionId == null) {
                                                     onNewSession(sessionId)
                                                 }
-                                                
+
                                                 // 如果是第一条消息，更新会话标题
                                                 if (messages.isEmpty()) {
                                                     dbHelper.updateSessionTitle(sessionId, userMessage.content.take(30))
                                                 }
-                                                
+
                                                 // 保存用户消息
                                                 dbHelper.saveMessage(sessionId, userMessage)
                                                 messages = messages + userMessage
-                                                
+
                                                 // 获取AI响应
                                                 val response = HttpUtils.sendMessage(sessionId, userMessage.content)
                                                 val aiMessage = Message(response, false)
