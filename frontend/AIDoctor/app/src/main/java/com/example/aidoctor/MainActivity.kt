@@ -44,6 +44,10 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.ui.window.Dialog
 
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.material3.ListItem
+
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
     private lateinit var dbHelper: ChatDatabaseHelper
@@ -450,6 +454,21 @@ fun ChatScreen(
                         modifier = Modifier.clickable {
                             showMenu = false
                             // TODO: 实现设置功能
+                        }
+                    )
+
+                    ListItem(
+                        headlineContent = { Text("打开系统时钟") },
+                        modifier = Modifier.clickable {
+                            showMenu = false
+                            val context = view.context
+                            val intent = Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "未找到时钟应用", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     )
                 }
