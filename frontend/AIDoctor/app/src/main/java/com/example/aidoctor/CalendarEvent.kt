@@ -13,8 +13,7 @@ fun addCalendarEvent(
     endMillis: Long,
     reminderMinutes: Int = 10
 ): Long? {
-    // 获取日历ID，通常为1（主日历），实际项目可查询日历表
-    val calendarId: Long = 1
+    val calendarId = getAvailableCalendarId(context) ?: return null
 
     val values = ContentValues().apply {
         put(CalendarContract.Events.DTSTART, startMillis)
@@ -24,13 +23,13 @@ fun addCalendarEvent(
         put(CalendarContract.Events.CALENDAR_ID, calendarId)
         put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
         put(CalendarContract.Events.EVENT_LOCATION, location)
+        put(CalendarContract.Events.ALL_DAY, 0)
     }
 
     val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
-    val eventId = uri?.lastPathSegment?.toLongOrNull()
+    val eventId = uri?.lastPathSegment?.toLong()
 
-    // 添加提醒
-    if (eventId != null) {
+    if (eventId != null && reminderMinutes > 0) {
         val reminderValues = ContentValues().apply {
             put(CalendarContract.Reminders.EVENT_ID, eventId)
             put(CalendarContract.Reminders.MINUTES, reminderMinutes)
@@ -41,3 +40,29 @@ fun addCalendarEvent(
 
     return eventId
 }
+
+private fun getAvailableCalendarId(context: Context): Long? {
+    val projection = arrayOf(
+        CalendarContract.Calendars._ID,
+        CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL
+    )
+
+    context.contentResolver.query(
+        CalendarContract.Calendars.CONTENT_URI,
+        projection,
+        null,
+        null,
+        null
+    )?.use { cursor ->
+        while (cursor.moveToNext()) {
+            val calId = cursor.getLong(0)
+            val accessLevel = cursor.getInt(1)
+            if (accessLevel >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR) {
+                return calId
+            }
+        }
+    }
+
+    return null
+}
+
