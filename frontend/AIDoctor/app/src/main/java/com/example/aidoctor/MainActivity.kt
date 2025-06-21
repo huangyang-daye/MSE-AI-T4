@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -48,9 +49,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-/// 通知和日志
+// 通知和日志
 import addCalendarEvent;
+import android.app.TimePickerDialog
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.window.Dialog
 import sendNotification;
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -131,6 +137,152 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+fun CalendarInputDialog(
+    onConfirm: (title: String, description: String, location: String, startMillis: Long, remind: Int, duration: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    // 表单字段状态
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    var duration by remember { mutableStateOf("30") } // 默认持续时间30分钟
+    var reminder by remember { mutableStateOf("10") } // 默认提前提醒10分钟
+    var startMillis by remember { mutableStateOf(System.currentTimeMillis()) } // 开始时间
+    var showDatePicker by remember { mutableStateOf(false) } // 控制是否显示日期选择器
+
+    // 如果用户点击了选择开始时间按钮，则弹出 DatePickerDialog 和 TimePickerDialog
+    if (showDatePicker) {
+        val calendar = Calendar.getInstance().apply { timeInMillis = startMillis }
+        var showNativeTimePicker by remember { mutableStateOf(false) }
+
+        // 第一步：选择日期
+        DatePickerDialog(
+            initialDate = startMillis,
+            onDateSelected = { selectedDate ->
+                calendar.timeInMillis = selectedDate
+                startMillis = calendar.timeInMillis
+                showNativeTimePicker = true
+            },
+            onDismiss = { showDatePicker = false }
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("设置提醒") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 标题输入框
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("标题") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 描述输入框
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("描述") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 地点输入框
+                OutlinedTextField(
+                    value = location,
+                    onValueChange = { location = it },
+                    label = { Text("地点") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 开始时间选择按钮
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDatePicker = true },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("选择开始时间：${Date(startMillis)}")
+                }
+
+                // 持续时间输入框
+                OutlinedTextField(
+                    value = duration,
+                    onValueChange = { newValue ->
+                        if (newValue.all { it.isDigit() }) duration = newValue
+                    },
+                    label = { Text("持续时间（分钟）") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 提前提醒输入框
+                OutlinedTextField(
+                    value = reminder,
+                    onValueChange = { newValue ->
+                        if (newValue.all { it.isDigit() }) reminder = newValue
+                    },
+                    label = { Text("提前提醒（分钟）") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                // 验证标题不为空后提交
+                if (title.isNotBlank()) {
+                    onConfirm(title, description, location, startMillis, reminder.toIntOrNull() ?: 5, duration)
+                }
+            }) {
+                Text("确认")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DatePickerDialog(
+    initialDate: Long,
+    onDateSelected:  (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDate)
+    Dialog(onDismissRequest = onDismiss) {
+        Surface {
+            Column {
+                DatePicker(state = datePickerState)
+                Row(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = {
+                        if (datePickerState.selectedDateMillis != null) {
+                            onDateSelected(datePickerState.selectedDateMillis!!)
+                        }
+                        onDismiss()
+                    }) {
+                        Text("确认")
+                    }
+
+                    TextButton(onClick = onDismiss) {
+                        Text("取消")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun MessageBubble(
     message: Message,
     modifier: Modifier = Modifier
@@ -198,6 +350,7 @@ fun ChatScreen(
     val keyboardHeight = WindowInsets.ime.getBottom(LocalDensity.current)
     var showMenu by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showCalendarDialog by remember { mutableStateOf(false) }
 
     // 加载当前会话的消息
     LaunchedEffect(currentSessionId) {
@@ -540,6 +693,47 @@ fun ChatScreen(
                             }
                         }
                     )
+
+                    ListItem(
+                        headlineContent = { Text("订阅日历") },
+                        leadingContent = {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "订阅日历")
+                        },
+                        modifier = Modifier.clickable {
+                            showMenu = false
+                            showCalendarDialog = true
+                        }
+                    )
+
+                    if (showCalendarDialog) {
+                        CalendarInputDialog(
+                            onConfirm = { title, desc, loc, startMillis, remind, duration ->
+                                val durationMinutes = duration.toIntOrNull() ?: 30 // 默认30分钟
+                                val endMillis = startMillis + durationMinutes * 60_000L
+                                // 处理添加日历事件逻辑
+                                val eventId = addCalendarEvent(
+                                    context = view.context,
+                                    title = title,
+                                    description = desc,
+                                    location = loc,
+                                    startMillis = startMillis,
+                                    endMillis = endMillis,
+                                    reminderMinutes = remind
+                                )
+                                showCalendarDialog = false
+                                if (eventId != null) {
+                                    Toast.makeText(view.context, "设置成功", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(view.context, "添加失败，请检查权限", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onDismiss = { showCalendarDialog = false }
+                        )
+                    }
+
+
+
+
                 }
             },
             confirmButton = {
