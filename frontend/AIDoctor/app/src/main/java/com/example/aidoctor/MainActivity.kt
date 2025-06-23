@@ -52,11 +52,15 @@ import java.util.Calendar
 // 通知和日志
 import addCalendarEvent;
 import android.app.TimePickerDialog
+import android.content.Context
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import sendNotification;
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 class MainActivity : ComponentActivity() {
@@ -149,23 +153,51 @@ fun CalendarInputDialog(
     var reminder by remember { mutableStateOf("10") } // 默认提前提醒10分钟
     var startMillis by remember { mutableStateOf(System.currentTimeMillis()) } // 开始时间
     var showDatePicker by remember { mutableStateOf(false) } // 控制是否显示日期选择器
+    var showNativeTimePicker by remember { mutableStateOf(false) } // 控制时间选择器
+    val calendar = Calendar.getInstance().apply { timeInMillis = startMillis }
 
-    // 如果用户点击了选择开始时间按钮，则弹出 DatePickerDialog 和 TimePickerDialog
     if (showDatePicker) {
-        val calendar = Calendar.getInstance().apply { timeInMillis = startMillis }
-        var showNativeTimePicker by remember { mutableStateOf(false) }
-
         // 第一步：选择日期
         DatePickerDialog(
             initialDate = startMillis,
             onDateSelected = { selectedDate ->
                 calendar.timeInMillis = selectedDate
-                startMillis = calendar.timeInMillis
-                showNativeTimePicker = true
+                // 只更新日期，不立即提交完整时间
+                val updatedCalendar = Calendar.getInstance().apply {
+                    timeInMillis = selectedDate
+                    set(Calendar.HOUR_OF_DAY, Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
+                    set(Calendar.MINUTE, Calendar.getInstance().get(Calendar.MINUTE))
+                }
+                startMillis = updatedCalendar.timeInMillis
+                showNativeTimePicker = true // 立即打开时间选择器
+                showDatePicker = false
             },
             onDismiss = { showDatePicker = false }
         )
+
     }
+    // 第二步：选择时间
+    if (showNativeTimePicker) {
+        TimePickerDialog(
+            context = LocalContext.current,
+            initialHour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+            initialMinute = Calendar.getInstance().get(Calendar.MINUTE),
+            is24HourMode = true,
+            onTimeSet = { hour, minute ->
+                // 处理时间选择逻辑
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, hour)
+                    set(Calendar.MINUTE, minute)
+                }
+                startMillis = calendar.timeInMillis
+                showNativeTimePicker = false
+            },
+            onCancel = {
+                showNativeTimePicker = false
+            }
+        )
+    }
+
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -195,16 +227,28 @@ fun CalendarInputDialog(
                     label = { Text("地点") },
                     modifier = Modifier.fillMaxWidth()
                 )
-
-                // 开始时间选择按钮
-                Row(
+                // 格式化显示时间
+                val dateTimeText = remember(startMillis) {
+                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(startMillis))
+                }
+                // 开始时间选择框
+                OutlinedTextField(
+                    value = dateTimeText,
+                    onValueChange = {},
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showDatePicker = true },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("选择开始时间：${Date(startMillis)}")
-                }
+                        .clip(RoundedCornerShape(8.dp)),
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { showDatePicker = true }) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "选择日期和时间"
+                            )
+                        }
+                    },
+                    label = { Text("开始时间") }
+                )
 
                 // 持续时间输入框
                 OutlinedTextField(
@@ -257,7 +301,11 @@ fun DatePickerDialog(
 ) {
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDate)
     Dialog(onDismissRequest = onDismiss) {
-        Surface {
+        Surface(
+            modifier = Modifier
+                .widthIn(max = 400.dp)
+                .padding(8.dp)
+        ) {
             Column {
                 DatePicker(state = datePickerState)
                 Row(
@@ -281,6 +329,36 @@ fun DatePickerDialog(
         }
     }
 }
+
+@Composable
+fun TimePickerDialog(
+    context: Context,
+    initialHour: Int,
+    initialMinute: Int,
+    is24HourMode: Boolean = true,
+    onTimeSet: (hourOfDay: Int, minute: Int) -> Unit,
+    onCancel: () -> Unit = {}
+) {
+    val dialog = remember(context, initialHour, initialMinute, is24HourMode) {
+        TimePickerDialog(
+            context,
+            TimePickerDialog.OnTimeSetListener { _, hourOfDay, minute ->
+                onTimeSet(hourOfDay, minute)
+            },
+            initialHour,
+            initialMinute,
+            is24HourMode
+        )
+    }
+
+    DisposableEffect(dialog) {
+        dialog.show()
+        onDispose {
+            dialog.dismiss()
+        }
+    }
+}
+
 
 @Composable
 fun MessageBubble(
@@ -700,7 +778,6 @@ fun ChatScreen(
                             Icon(imageVector = Icons.Default.Add, contentDescription = "订阅日历")
                         },
                         modifier = Modifier.clickable {
-                            showMenu = false
                             showCalendarDialog = true
                         }
                     )
