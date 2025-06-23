@@ -84,6 +84,7 @@ def analyze_session():
                 {"role": "system", "content": full_prompt},
                 {"role": "user", "content": user_query}
             ],
+            stream = True,
             temperature=1,
             presence_penalty=0,
             frequency_penalty=0,
