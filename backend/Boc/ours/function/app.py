@@ -2,7 +2,7 @@ from flask import Flask
 import logging
 
 # 导入两个模块
-from init_track import track_bp
+from dialogue_track import track_bp
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
