@@ -12,7 +12,7 @@ import java.net.URLEncoder
 
 class HttpUtils {
     companion object {
-        private const val BASE_URL = "http://26.26.26.1:8000"
+        private const val BASE_URL = "http://192.168.1.106:8000"
         private const val TAG = "HttpUtils"
 
         suspend fun sendMessage(sessionId: Long, message: String): String = withContext(Dispatchers.IO) {

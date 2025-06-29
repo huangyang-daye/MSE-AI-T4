@@ -1,65 +1,22 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, Response, jsonify
 from datetime import datetime
 from openai import OpenAI
 import logging
-from chat_database import ChatDatabaseHelper  # 引入数据库帮助类
+from chat_database import ChatDatabaseHelper
 
-# 初始化日志
 logger = logging.getLogger(__name__)
-
-# 创建蓝图
 track_bp = Blueprint('track', __name__)
 
-# 初始化模型客户端
 client = OpenAI(
     api_key="sk-qopksyugdcrdnafcehrtuvjfpqpnkkznzagihikhcwsnyinj",
     base_url="https://api.siliconflow.cn/v1"
 )
 
-# 实例化数据库帮助类
 db_helper = ChatDatabaseHelper()
-
 session_states = {}
 
-@track_bp.route("/get", methods=["POST"])
-def analyze_session():
-    data = request.get_json()
-    user_query = data.get("msg") or ""
-    session_id = data.get("session_id", "default_session")
-
-    logger.info(f"[{datetime.now()}] 收到分析请求")
-    logger.debug(f"用户问题: {user_query}")
-
-    if not user_query:
-        logger.warning("缺少必要参数 msg")
-        return jsonify({"error": "Missing 'msg' in request"}), 400
-
+def generate_stream(session_id, user_query, context):
     try:
-        now = datetime.now()
-
-        # 更新 session_states 缓存
-        if session_id not in session_states:
-            
-            # 判断 session_id 是否存在于数据库中
-            if db_helper.session_exists(session_id):
-                # 如果存在，从数据库加载历史消息
-                messages = db_helper.get_session_messages(session_id)
-                context = "\n".join([f"User: {msg['content']}" if msg['is_user'] else f"AI: {msg['content']}" for msg in messages])
-                logger.info(f"初始化 session {session_id}，从数据库加载上下文")
-            else:
-                # 如果不存在，创建新的 session
-                context = ""  # 新 session 的初始上下文为空
-                logger.info(f"创建新的 session {session_id}")
-                
-            session_states[session_id] = {
-                "context": context,
-                "last_active_time": now,
-                "last_saved_time": None
-            }
-        else:
-            context  = session_states[session_id]["context"]
-            session_states[session_id]["last_active_time"] = now
-
         name = '医疗问诊助手'
         role = '结合历史对话，通过对话引导用户描述症状，收集相关信息，并提供初步的诊疗建议'
         full_prompt = f"""
@@ -84,39 +41,76 @@ def analyze_session():
                 {"role": "system", "content": full_prompt},
                 {"role": "user", "content": user_query}
             ],
-            stream = True,
+            stream=True,
             temperature=1,
             presence_penalty=0,
             frequency_penalty=0,
             max_tokens=2000
         )
 
-        bot_reply = response.choices[0].message.content.strip()
-        logger.info(f"AI 返回结果: {bot_reply[:100]}...")
+        bot_reply = ""
+        for chunk in response:
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                content = content.replace("\n", "<br>")
+                bot_reply += content
+                yield f"data: {content}\n\n"  # 按照 EventStream 格式发送每一块
 
-        new_context = session_states[session_id]["context"] + f"\nUser: {user_query}\nAI: {bot_reply}"
+        # 更新 session_states 缓存
+        new_context = context + f"\nUser: {user_query}\nAI: {bot_reply}"
         session_states[session_id]["context"] = new_context
+
+        now = datetime.now()
         session_states[session_id]["last_active_time"] = now
 
         last_saved_time = session_states[session_id].get("last_saved_time", None)
-
-        should_auto_save = False
-        if last_saved_time is None:
-            should_auto_save = False
-        else:
-            time_diff = (now - last_saved_time).total_seconds()
-            if time_diff >= 300:
-                should_auto_save = True
+        should_auto_save = last_saved_time is None or (now - last_saved_time).total_seconds() >= 10
 
         if should_auto_save:
-            db_helper.save_message(session_id, user_query, is_user=True)
-            db_helper.save_message(session_id, bot_reply, is_user=False)
-            session_states[session_id]["last_saved_time"] = now
-            logger.info(f"已自动保存 session {session_id} 到数据库")
+            try:
+                db_helper.save_message(session_id, user_query, is_user=True)
+                db_helper.save_message(session_id, bot_reply, is_user=False)
+                session_states[session_id]["last_saved_time"] = now
+                
+                logger.info(f"已自动保存 session {session_id} 到数据库")
+            except Exception as e:
+                logger.error(f"保存 session {session_id} 到数据库时出错: {str(e)}", exc_info=True)
 
-        return jsonify({
-            "response": bot_reply,
-        })
+    except Exception as e:
+        logger.error(f"调用大模型时出错: {str(e)}", exc_info=True)
+        yield f"data: [错误] 内部服务器错误\n\n"
+
+@track_bp.route("/get", methods=["POST"])
+def analyze_session():
+    data = request.get_json()
+    user_query = data.get("msg") or ""
+    session_id = data.get("session_id", "default_session")
+
+    logger.info(f"[{datetime.now()}] 收到分析请求")
+    logger.debug(f"用户问题: {user_query}")
+
+    if not user_query:
+        return jsonify({"error": "Missing 'msg' in request"}), 400
+
+    try:
+        now = datetime.now()
+
+        if session_id not in session_states:
+            if db_helper.session_exists(session_id):
+                messages = db_helper.get_session_messages(session_id)
+                context = "\n".join([f"User: {msg['content']}" if msg['is_user'] else f"AI: {msg['content']}" for msg in messages])
+            else:
+                context = ""
+            session_states[session_id] = {
+                "context": context,
+                "last_active_time": now,
+                "last_saved_time": None
+            }
+        else:
+            context = session_states[session_id]["context"]
+            session_states[session_id]["last_active_time"] = now
+
+        return Response(generate_stream(session_id, user_query, context), mimetype='text/event-stream')
 
     except Exception as e:
         logger.error(f"调用大模型时出错: {str(e)}", exc_info=True)

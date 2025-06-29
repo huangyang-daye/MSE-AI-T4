@@ -1,3 +1,6 @@
+import logging
+
+log = logging.getLogger(__name__)
 import sqlite3
 from datetime import datetime
 import os
@@ -103,6 +106,7 @@ class ChatDatabaseHelper:
     def save_message(self, session_id: int, message_content: str, is_user: bool):
         """保存一条消息"""
         timestamp = int(datetime.now().timestamp() * 1000)  # 毫秒时间戳
+        log.info(f"Saving message for session {session_id}: {message_content} (is_user={is_user})")
         with self._connect() as conn:
             cursor = conn.cursor()
             cursor.execute("""

@@ -1,5 +1,4 @@
 package com.example.aidoctor
-
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -53,10 +52,16 @@ import java.util.Calendar
 import addCalendarEvent;
 import android.app.TimePickerDialog
 import android.content.Context
+import android.graphics.Rect
+import android.provider.AlarmClock
+import android.util.Log
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.window.Dialog
+import com.example.aidoctor.utils.StreamingHttpUtils
+import dev.jeziellago.compose.markdowntext.MarkdownText
 import sendNotification;
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -382,8 +387,9 @@ fun MessageBubble(
             Spacer(modifier = Modifier.width(8.dp))
         }
 
-        Text(
-            text = message.content,
+        // 使用 MarkdownText 渲染消息内容，添加 fillMaxWidth 确保宽度撑满
+        MarkdownText(
+            markdown = message.content,
             modifier = Modifier
                 .widthIn(max = 280.dp) // 限制最大宽度为屏幕宽度的70%
                 .background(
@@ -391,8 +397,7 @@ fun MessageBubble(
                     shape = RoundedCornerShape(10.dp)
                 )
                 .padding(10.dp),
-            color = if (message.isUser) Color.White else Color.Black,
-            fontSize = 16.sp
+            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.2, color = if (message.isUser) Color.White else Color.Black) // 增加行高
         )
 
         if (message.isUser) {
@@ -434,6 +439,8 @@ fun ChatScreen(
     LaunchedEffect(currentSessionId) {
         if (currentSessionId != null) {
             messages = dbHelper.getSessionMessages(currentSessionId)
+            Log.i("MainActivity", "currentSessionId: $currentSessionId")
+            Log.i("MainActivity", "messages: $messages")
         } else {
             messages = emptyList()
         }
@@ -442,7 +449,7 @@ fun ChatScreen(
     // 监听键盘状态
     DisposableEffect(view) {
         val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            val rect = android.graphics.Rect()
+            val rect = Rect()
             view.getWindowVisibleDisplayFrame(rect)
             val screenHeight = view.rootView.height
             val keypadHeight = screenHeight - rect.bottom
@@ -596,14 +603,14 @@ fun ChatScreen(
                                 placeholder = { Text("请输入您的问题...") },
                                 shape = RoundedCornerShape(24.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color.Transparent,
-                                    unfocusedBorderColor = Color.Transparent
+                                    focusedBorderColor = Color.Black,
+                                    unfocusedBorderColor = Color.Black
                                 )
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
                                 onClick = {
-                                    sendNotification(view.context, "AIDoctor 提醒", "偷偷给你加了个30分钟后的日历哈哈哈哈");
+//                                    sendNotification(view.context, "AIDoctor 提醒", "偷偷给你加了个30分钟后的日历哈哈哈哈");
 
                                     // 会g, 因为测试机器日历不行
 //                                    val calendar = Calendar.getInstance()
@@ -635,27 +642,39 @@ fun ChatScreen(
 
                                         scope.launch {
                                             try {
-
-                                                // 如果是新会话，创建一个新的会话
                                                 val sessionId = currentSessionId ?: dbHelper.createNewSession("新对话")
                                                 if (currentSessionId == null) {
                                                     onNewSession(sessionId)
                                                 }
 
-                                                // 如果是第一条消息，更新会话标题
                                                 if (messages.isEmpty()) {
                                                     dbHelper.updateSessionTitle(sessionId, userMessage.content.take(30))
                                                 }
 
-                                                // 保存用户消息
                                                 dbHelper.saveMessage(sessionId, userMessage)
                                                 messages = messages + userMessage
 
-                                                // 获取AI响应
-                                                val response = HttpUtils.sendMessage(sessionId, userMessage.content)
-                                                val aiMessage = Message(response, false)
+                                                val aiMessage = Message("", false)
                                                 dbHelper.saveMessage(sessionId, aiMessage)
+                                                var accumulatedResponse = ""
                                                 messages = messages + aiMessage
+
+                                                // 流式获取 AI 回复
+                                                StreamingHttpUtils.streamMessage(sessionId, userMessage.content) { chunk ->
+                                                    accumulatedResponse += chunk
+                                                    val updatedMessages = messages.mapIndexed { index, message ->
+                                                        if (index == messages.size - 1 && !message.isUser) {
+                                                            message.copy(content = accumulatedResponse)
+                                                        } else {
+                                                            message
+                                                        }
+                                                    }
+                                                    messages = updatedMessages
+                                                }
+
+                                                // 最终保存完整的回复到数据库
+                                                dbHelper.updateMessageContent(sessionId, accumulatedResponse)
+
                                             } catch (e: Exception) {
                                                 e.printStackTrace()
                                                 val errorMessage = Message("发送消息失败，请稍后重试", false)
@@ -762,7 +781,7 @@ fun ChatScreen(
                         modifier = Modifier.clickable {
                             showMenu = false
                             val context = view.context
-                            val intent = Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)
+                            val intent = Intent(AlarmClock.ACTION_SHOW_ALARMS)
                             intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                             try {
                                 context.startActivity(intent)

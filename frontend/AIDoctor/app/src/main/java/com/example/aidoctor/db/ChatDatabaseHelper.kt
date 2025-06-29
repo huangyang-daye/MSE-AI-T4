@@ -40,6 +40,31 @@ class ChatDatabaseHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_
             db.close()
         }
     }
+    suspend fun updateMessageContent(messageId: Long, newContent: String) = withContext(Dispatchers.IO) {
+        try {
+            val database = writableDatabase
+            val values = ContentValues().apply {
+                put(COLUMN_CONTENT, newContent)
+            }
+    
+            val rowsAffected = database.update(
+                TABLE_MESSAGES,
+                values,
+                "$COLUMN_ID = ?",
+                arrayOf(messageId.toString())
+            )
+    
+            if (rowsAffected == 0) {
+                throw Exception("Failed to update message with ID: $messageId")
+            }
+    
+            Log.d("ChatDatabaseHelper", "Message with ID $messageId updated successfully")
+    
+        } catch (e: Exception) {
+            Log.e("ChatDatabaseHelper", "Error updating message content", e)
+            throw e
+        }
+    }
 
     override fun onCreate(db: SQLiteDatabase) {
         try {
