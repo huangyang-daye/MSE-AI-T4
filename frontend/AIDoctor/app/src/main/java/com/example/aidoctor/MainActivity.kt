@@ -386,31 +386,47 @@ fun MessageBubble(
             )
             Spacer(modifier = Modifier.width(8.dp))
         }
-
-        // 使用 MarkdownText 渲染消息内容，添加 fillMaxWidth 确保宽度撑满
-        MarkdownText(
-            markdown = message.content,
-            modifier = Modifier
-                .widthIn(max = 280.dp) // 限制最大宽度为屏幕宽度的70%
-                .background(
-                    color = if (message.isUser) Color(0xFF007DFF) else Color.White,
-                    shape = RoundedCornerShape(10.dp)
+        Column {
+            // 添加提示信息
+            if (!message.isUser) {
+                Text(
+                    text = "内容由AI生成，注意甄别，如有不适，请及时就医",
+                    color = Color.Black,
+                    modifier = Modifier
+                        .background(Color(0xFFFFF3CD)) // 浅黄色背景
+                        .padding(4.dp)
+                        .widthIn(max = 280.dp)
                 )
-                .padding(10.dp),
-            style = MaterialTheme.typography.bodyMedium.copy(lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.2, color = if (message.isUser) Color.White else Color.Black) // 增加行高
-        )
-
-        if (message.isUser) {
-            Spacer(modifier = Modifier.width(8.dp))
-            // 用户头像
-            Image(
-                painter = painterResource(id = R.drawable.user_avatar),
-                contentDescription = "用户头像",
+            }
+            // 使用 MarkdownText 渲染消息内容，添加 fillMaxWidth 确保宽度撑满
+            MarkdownText(
+                markdown = message.content,
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
+                    .widthIn(max = 280.dp) // 限制最大宽度为屏幕宽度的70%
+                    .background(
+                        color = if (message.isUser) Color(0xFF007DFF) else Color.White,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    .padding(10.dp),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.2,
+                    color = if (message.isUser) Color.White else Color.Black
+                ) // 增加行高
             )
+            Log.i("MessageBubble", "Message content: ${message.content}")
+
         }
+        if (message.isUser) {
+        Spacer(modifier = Modifier.width(8.dp))
+        // 用户头像
+        Image(
+            painter = painterResource(id = R.drawable.user_avatar),
+            contentDescription = "用户头像",
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+        )
+    }
     }
 }
 
@@ -656,6 +672,7 @@ fun ChatScreen(
 
                                                 val aiMessage = Message("", false)
                                                 dbHelper.saveMessage(sessionId, aiMessage)
+
                                                 var accumulatedResponse = ""
                                                 messages = messages + aiMessage
 
@@ -670,6 +687,9 @@ fun ChatScreen(
                                                         }
                                                     }
                                                     messages = updatedMessages
+
+                                                    val aiMessage1 = Message(accumulatedResponse, false)
+                                                    dbHelper.updateLastMessage(sessionId, aiMessage1)
                                                 }
 
                                                 // 最终保存完整的回复到数据库
