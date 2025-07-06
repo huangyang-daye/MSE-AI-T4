@@ -11,7 +11,7 @@ import org.json.JSONObject
 import java.net.URLEncoder
 
 object StreamingHttpUtils {
-    private const val BASE_URL = "http://192.168.1.101:8000"
+    private const val BASE_URL = "http://47.110.47.254:8000"
     private val client = OkHttpClient()
 
     suspend fun streamMessage(

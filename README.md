@@ -37,42 +37,25 @@
 - **病情追踪**：用户可以记录每日症状变化，获取基于现有数据的趋势分析报告。
 - **个性化服务**：根据用户的输入进行智能分析，提供更为个性化的指导建议。
 - **智能助理**：提供智能助理服务，为用户提供个性化的健康建议。
-- **紧急联系人通知**：在用户错过重要用药提醒时通知预设的紧急联系人。
 
 ## 技术栈
-- **后端**：Python, Flask, Django, FastAPI
-- **前端**：React, Vue, Angular
+- **后端**：Python, Flask
+- **前端**：Kotlin, Android
 
 
 ## 项目结构
 ```
 MSE-AI-T4/
     ├── backend/               # 后端代码，主要由林凡钧、刘佳凡、徐平负责维护
-    │   ├── app.py             # 主应用文件（如 Flask/Django/FastAPI）
-    │   ├── requirements.txt   # Python依赖包列表
-    │   ├── models/            # 存放模型相关的代码
-    │   ├── services/          # 服务层逻辑（如与LLM交互）
+    │   ├── AI-Doc/            # 医疗问答模块，主要由林凡钧、刘佳凡、徐平负责维护
+    │   ├── BianQue/           # 经过微调的BianQue模型,由刘佳凡完成
     │   └── tests/             # 后端单元测试，主要由翟怡丹、王博海负责维护
-    ├── frontend/              # 前端代码，主要由苏宇翔、徐嘉雯、徐平负责维护
-    │   ├── public/            # 静态资源
-    │   ├── src/               # React/Vue/Angular等前端框架代码
-    │   │   ├── components/    # UI组件
-    │   │   ├── pages/         # 页面组件
-    │   │   └── App.js         # 主入口文件
-    │   ├── package.json       # 前端依赖包列表
-    │   └── README.md          # 前端说明文档
+    ├── frontend/AIDoctor/     # 前端代码，主要由苏宇翔、徐嘉雯、徐平负责维护
     ├── docs/                  # 文档目录，主要由黄杨、董宜涛、姚之远负责维护
-    │   ├── api-docs.md        # API 文档
-    │   ├── architecture.md    # 系统架构设计
-    │   ├── user-guide.md      # 用户指南
-    │   └── dev-guide.md       # 开发者指南
-    ├── data/                  # 数据相关
-    │   ├── raw/               # 原始数据集
-    │   ├── processed/         # 处理后的数据
-    │   └── README.md          # 数据说明
+    │   ├── ProcessRecord/     # 项目进度记录和课堂记录，由姚之远完成
+    │   └── TestRecords/       # 项目测试记录，由徐嘉雯、翟怡丹 完成
     ├── .gitignore             # 忽略文件规则
     ├── README.md              # 项目主说明文档
-    └── LICENSE                # 开源许可证
 ```
 
 ## Getting Started
