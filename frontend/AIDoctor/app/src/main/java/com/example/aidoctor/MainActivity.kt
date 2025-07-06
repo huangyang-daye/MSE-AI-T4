@@ -627,7 +627,6 @@ fun ChatScreen(
                             Button(
                                 onClick = {
 //                                    sendNotification(view.context, "AIDoctor 提醒", "偷偷给你加了个30分钟后的日历哈哈哈哈");
-
                                     // 会g, 因为测试机器日历不行
 //                                    val calendar = Calendar.getInstance()
 //                                    val startMillis = calendar.timeInMillis + 60 * 1000 // 1分钟后
@@ -648,9 +647,6 @@ fun ChatScreen(
 //                                    } else {
 //                                        Toast.makeText(view.context, "添加日历事件失败，请检查权限", Toast.LENGTH_SHORT).show()
 //                                    }
-
-
-
                                     if (inputText.trim().isNotEmpty()) {
                                         val userMessage = Message(inputText, true)
                                         inputText = ""
@@ -658,6 +654,7 @@ fun ChatScreen(
 
                                         scope.launch {
                                             try {
+                                                
                                                 val sessionId = currentSessionId ?: dbHelper.createNewSession("新对话")
                                                 if (currentSessionId == null) {
                                                     onNewSession(sessionId)
@@ -670,11 +667,12 @@ fun ChatScreen(
                                                 dbHelper.saveMessage(sessionId, userMessage)
                                                 messages = messages + userMessage
 
+                                                // 只添加一次 AI 消息
                                                 val aiMessage = Message("", false)
                                                 dbHelper.saveMessage(sessionId, aiMessage)
+                                                messages = messages + aiMessage
 
                                                 var accumulatedResponse = ""
-                                                messages = messages + aiMessage
 
                                                 // 流式获取 AI 回复
                                                 StreamingHttpUtils.streamMessage(sessionId, userMessage.content) { chunk ->
@@ -687,25 +685,26 @@ fun ChatScreen(
                                                         }
                                                     }
                                                     messages = updatedMessages
-
-                                                    val aiMessage1 = Message(accumulatedResponse, false)
-                                                    dbHelper.updateLastMessage(sessionId, aiMessage1)
                                                 }
 
                                                 // 最终保存完整的回复到数据库
                                                 dbHelper.updateMessageContent(sessionId, accumulatedResponse)
+                                                // 更新最后一条消息内容
+                                                dbHelper.updateLastMessage(sessionId, Message(accumulatedResponse, false))
 
                                             } catch (e: Exception) {
                                                 e.printStackTrace()
-                                                val errorMessage = Message("发送消息失败，请稍后重试", false)
-                                                if (currentSessionId != null) {
-                                                    try {
-                                                        dbHelper.saveMessage(currentSessionId, errorMessage)
-                                                    } catch (dbError: Exception) {
-                                                        dbError.printStackTrace()
+                                                if (messages.lastOrNull()?.isUser == true) { // 确保最后一条是用户消息才添加失败消息
+                                                    val errorMessage = Message("发送消息失败，请稍后重试", false)
+                                                    if (currentSessionId != null) {
+                                                        try {
+                                                            dbHelper.saveMessage(currentSessionId, errorMessage)
+                                                        } catch (dbError: Exception) {
+                                                            dbError.printStackTrace()
+                                                        }
                                                     }
+                                                    messages = messages + errorMessage
                                                 }
-                                                messages = messages + errorMessage
                                             } finally {
                                                 isTyping = false
                                             }
