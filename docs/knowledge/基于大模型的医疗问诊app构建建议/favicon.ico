@@ -1,0 +1,5 @@
+/* 创建一个简单的favicon */
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="4" fill="#0d6efd"/>
+  <path d="M16 8a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H9a1 1 0 1 1 0-2h6V9a1 1 0 0 1 1-1z" fill="white"/>
+</svg>
